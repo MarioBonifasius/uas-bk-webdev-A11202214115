@@ -10,7 +10,9 @@ class Order extends Model
         'user_id',
         'event_id',
         'order_date',
-        'total_harga'
+        'total_harga',
+        'payment_status',
+        'payment_method'
     ];
     protected $casts = [
         'order_date' => 'datetime',

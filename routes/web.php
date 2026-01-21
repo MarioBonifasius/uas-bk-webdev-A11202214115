@@ -12,6 +12,7 @@ use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\KategoriController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\TiketController;
+use App\Http\Controllers\PaymentController;
 
 
 Route::get('/', [DashboardController::class, 'index'])->name('home');
@@ -35,6 +36,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
+    Route::get('/payments/{order}', [PaymentController::class, 'show'])->name('payments.show');
+    Route::post('/payments/{order}/process', [PaymentController::class, 'process'])->name('payments.process');
 });
 
 
@@ -46,6 +49,5 @@ Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
     Route::resource('categories', KategoriController::class);
     Route::resource('events', EventsController::class);
     Route::resource('tickets', TiketController::class);
-    Route::get('/histories', [HistoryController::class, 'index'])->name('histories.index');
-    Route::get('/histories/{id}', [HistoryController::class, 'show'])->name('histories.show');
+    Route::resource('histories', HistoryController::class);
 });

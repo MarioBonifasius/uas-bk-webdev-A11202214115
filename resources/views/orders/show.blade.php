@@ -37,16 +37,31 @@
 
                     <div class="divider"></div>
 
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center mb-4">
                         <span class="font-bold">Total</span>
                         <span class="font-bold text-lg">Rp {{ number_format($order->total_harga, 0, ',', '.') }}</span>
+                    </div>
 
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold">Status Pembayaran:</span>
+                        <span>
+                            @if($order->payment_status === 'paid')
+                                <span class="badge badge-success">Sudah Dibayar</span>
+                            @elseif($order->payment_status === 'pending')
+                                <span class="badge badge-warning">Menunggu Pembayaran</span>
+                            @else
+                                <span class="badge badge-error">Gagal</span>
+                            @endif
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="mt-6">
-            <a href="{{ route('orders.index') }}" class="btn btn-primary text-white">Kembali ke Riwayat Pembelian</a>
+        <div class="mt-6 flex gap-3">
+            <a href="{{ route('orders.index') }}" class="btn btn-ghost">Kembali ke Riwayat Pembelian</a>
+            @if($order->payment_status !== 'paid')
+                <a href="{{ route('payments.show', $order) }}" class="btn btn-primary text-white">Lanjut ke Pembayaran</a>
+            @endif
         </div>
 
     </section>
