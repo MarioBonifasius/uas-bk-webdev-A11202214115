@@ -11,10 +11,11 @@ class TiketController extends Controller
 {
     public function index()
     {
-        $events = Event::all();
-        $categories = Kategori::all();
-        $tickets = Tiket::all();
-        return view('eventshow', compact('events', 'categories','tickets'));
+        $events = Event::whereNull('deleted_at')->get();
+        $categories = Kategori::whereNull('deleted_at')->get();
+        $tickets = Tiket::whereNull('deleted_at')->get();
+        $deletedTickets = Tiket::onlyTrashed()->get();
+        return view('eventshow', compact('events', 'categories', 'tickets', 'deletedTickets'));
     }
     public function store(Request $request)
     {
@@ -52,6 +53,15 @@ class TiketController extends Controller
         $eventId = $ticket->event_id;
         $ticket->delete();
 
-        return redirect()->route('admin.events.show', $eventId)->with('success', 'Ticket berhasil dihapus.');
+        return redirect()->route('admin.events.show', $eventId)->with('success', 'Tiket berhasil dihapus.');
+    }
+
+    public function restore(string $id)
+    {
+        $ticket = Tiket::onlyTrashed()->findOrFail($id);
+        $eventId = $ticket->event_id;
+        $ticket->restore();
+
+        return redirect()->route('admin.events.show', $eventId)->with('success', 'Tiket berhasil dipulihkan.');
     }
 }

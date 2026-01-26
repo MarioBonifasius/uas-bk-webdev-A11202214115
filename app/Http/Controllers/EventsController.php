@@ -10,8 +10,9 @@ class EventsController extends Controller
 {
     public function index()
     {
-        $events = Event::with('kategori')->get();
-        return view('events.events', compact('events'));
+        $events = Event::whereNull('deleted_at')->with('kategori')->get();
+        $deletedEvents = Event::onlyTrashed()->with('kategori')->get();
+        return view('events.events', compact('events', 'deletedEvents'));
     }
 
     public function create()
@@ -92,8 +93,16 @@ class EventsController extends Controller
     }
     public function destroy(string $id)
     {
-        Event::destroy($id);
-        return redirect()->route('admin.events.index')->with('success', 'Kategori berhasil dihapus.');
+        $event = Event::findOrFail($id);
+        $event->delete();
+        return redirect()->route('admin.events.index')->with('success', 'Event berhasil dihapus.');
+    }
+
+    public function restore(string $id)
+    {
+        $event = Event::onlyTrashed()->findOrFail($id);
+        $event->restore();
+        return redirect()->route('admin.events.index')->with('success', 'Event berhasil dipulihkan.');
     }
 
       public function lihat(Event $event)

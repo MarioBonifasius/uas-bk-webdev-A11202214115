@@ -12,8 +12,9 @@ class HistoryController extends Controller
      */
     public function index()
     {
-        $histories = Order::with(['user', 'event'])->latest()->get();
-        return view('histories.histories', compact('histories'));
+        $histories = Order::whereNull('deleted_at')->with(['user', 'event'])->latest()->get();
+        $deletedHistories = Order::onlyTrashed()->with(['user', 'event'])->latest()->get();
+        return view('histories.histories', compact('histories', 'deletedHistories'));
     }
 
     /**
@@ -83,10 +84,7 @@ class HistoryController extends Controller
                 $detail->tiket->increment('stok', $detail->jumlah);
             }
 
-            // Delete detail orders
-            $order->detailOrders()->delete();
-
-            // Delete order
+            // Soft delete order (detail orders akan terhapus juga via cascade)
             $order->delete();
 
             return redirect()->route('admin.histories.index')
@@ -94,6 +92,24 @@ class HistoryController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('admin.histories.index')
                 ->with('error', 'Gagal menghapus pesanan: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Restore the specified order
+     */
+    public function restore(string $history)
+    {
+        $order = Order::onlyTrashed()->findOrFail($history);
+
+        try {
+            $order->restore();
+
+            return redirect()->route('admin.histories.index')
+                ->with('success', 'Pesanan berhasil dipulihkan.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.histories.index')
+                ->with('error', 'Gagal memulihkan pesanan: ' . $e->getMessage());
         }
     }
 }

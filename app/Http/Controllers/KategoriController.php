@@ -9,8 +9,9 @@ class KategoriController extends Controller
 {
     public function index()
     {
-        $categories = Kategori::all();
-        return view('pages-admin.kategori', compact('categories'));
+        $categories = Kategori::whereNull('deleted_at')->get();
+        $deletedCategories = Kategori::onlyTrashed()->get();
+        return view('pages-admin.kategori', compact('categories', 'deletedCategories'));
     }
 
     public function store(Request $request)
@@ -49,7 +50,15 @@ class KategoriController extends Controller
 
     public function destroy(string $id)
     {
-        Kategori::destroy($id);
+        $category = Kategori::findOrFail($id);
+        $category->delete();
         return redirect()->route('admin.categories.index')->with('success', 'Kategori berhasil dihapus.');
+    }
+
+    public function restore(string $id)
+    {
+        $category = Kategori::onlyTrashed()->findOrFail($id);
+        $category->restore();
+        return redirect()->route('admin.categories.index')->with('success', 'Kategori berhasil dipulihkan.');
     }
 }

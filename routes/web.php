@@ -47,7 +47,14 @@ Route::get('/detailevent/{event}', [EventsController::class, 'lihat'])->name('ev
 Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminController::class, 'home'])->name('dashboard');
     Route::resource('categories', KategoriController::class);
+    Route::post('/categories/{id}/restore', [KategoriController::class, 'restore'])->name('categories.restore');
+    
     Route::resource('events', EventsController::class);
+    Route::post('/events/{id}/restore', [EventsController::class, 'restore'])->name('events.restore');
+    
     Route::resource('tickets', TiketController::class);
+    Route::post('/tickets/{id}/restore', [TiketController::class, 'restore'])->name('tickets.restore');
+    
     Route::resource('histories', HistoryController::class);
+    Route::post('/histories/{id}/restore', [HistoryController::class, 'restore'])->name('histories.restore');
 });

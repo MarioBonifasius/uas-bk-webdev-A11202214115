@@ -1,0 +1,311 @@
+<!-- SOFT DELETE EXPLANATION -->
+<!-- 
+  SOFT DELETE adalah teknik untuk menandai data sebagai "dihapus" tanpa benar-benar 
+  menghapusnya dari database. Data tetap tersimpan di database namun tersembunyi dari view normal.
+  
+  CARA KERJA SOFT DELETE:
+  ======================
+  
+  1. Ada kolom 'deleted_at' di database (default NULL)
+  2. Ketika data dihapus: deleted_at = timestamp (waktu penghapusan)
+  3. Data tetap ada di database, tapi tidak muncul di view normal
+  4. Ada menu khusus untuk lihat data yang dihapus dan restore-nya
+  
+  VISUAL:
+  -------
+  SEBELUM DELETE:
+  | id | nama  | deleted_at |
+  |----|-------|------------|
+  | 1  | Event | NULL       | ← Muncul di view normal
+  | 2  | Tiket | NULL       | ← Muncul di view normal
+  
+  SETELAH DELETE:
+  | id | nama  | deleted_at          |
+  |----|-------|---------------------|
+  | 1  | Event | NULL                | ← Masih muncul
+  | 2  | Tiket | 2026-01-26 10:30:45 | ← TIDAK muncul di view normal
+  
+  FITUR YANG DITAMBAHKAN:
+  =======================
+  
+  1. Migrations (database schema changes):
+     - 2026_01_26_000001_add_soft_deletes_to_events_table.php
+     - 2026_01_26_000002_add_soft_deletes_to_tikets_table.php
+     - 2026_01_26_000003_add_soft_deletes_to_kategoris_table.php
+     - 2026_01_26_000004_add_soft_deletes_to_orders_table.php
+  
+  2. Models (dengan SoftDeletes Trait):
+     - Event model
+     - Tiket model
+     - Kategori model
+     - Order model
+  
+  3. Controllers (dengan restore logic):
+     - KategoriController
+     - EventsController
+     - TiketController
+     - HistoryController
+  
+  4. Routes (restore endpoints):
+     - POST /admin/categories/{id}/restore
+     - POST /admin/events/{id}/restore
+     - POST /admin/tickets/{id}/restore
+     - POST /admin/histories/{id}/restore
+-->
+
+==============================================================================
+PENJELASAN DETAIL SOFT DELETE DI PROJECT INI
+==============================================================================
+
+🔍 CARA MEMBACANYA DI DATABASE:
+=====================================
+
+Sebelum soft delete:
+```sql
+SELECT * FROM events;
+```
+Output:
+```
+| id | judul     | kategori_id | user_id | tanggal | lokasi | gambar | deleted_at |
+|----|-----------|-------------|---------|--------|--------|--------|------------|
+| 1  | Konser XY | 1           | 1       | ...    | ...    | ...    | NULL       | ✅ Muncul
+| 2  | Pameran Z | 2           | 1       | ...    | ...    | ...    | NULL       | ✅ Muncul
+```
+
+Setelah delete event 2:
+```sql
+UPDATE events SET deleted_at = '2026-01-26 10:30:45' WHERE id = 2;
+```
+Output normal query:
+```sql
+SELECT * FROM events WHERE deleted_at IS NULL;
+```
+```
+| id | judul     | kategori_id | user_id | tanggal | lokasi | gambar | deleted_at |
+|----|-----------|-------------|---------|--------|--------|--------|------------|
+| 1  | Konser XY | 1           | 1       | ...    | ...    | ...    | NULL       | ✅ Hanya ini
+```
+
+Lihat data yang dihapus:
+```sql
+SELECT * FROM events WHERE deleted_at IS NOT NULL;
+```
+```
+| id | judul     | kategori_id | user_id | tanggal | lokasi | gambar | deleted_at          |
+|----|-----------|-------------|---------|--------|--------|--------|---------------------|
+| 2  | Pameran Z | 2           | 1       | ...    | ...    | ...    | 2026-01-26 10:30:45 | 🗑️ Data dihapus
+```
+
+
+📝 CARA MEMBACANYA DI CODE:
+============================
+
+1️⃣ DI MODELS (app/Models/Event.php):
+   ```php
+   use Illuminate\Database\Eloquent\SoftDeletes;
+
+   class Event extends Model
+   {
+       use HasFactory, SoftDeletes;
+       // ↑ Trait ini membuat model support soft delete
+   }
+   ```
+   
+   Artian: Model ini sekarang bisa menggunakan:
+   - ->delete() → soft delete (set deleted_at)
+   - ->restore() → kembalikan (set deleted_at = NULL)
+   - ::onlyTrashed() → hanya data yang dihapus
+   - ::withTrashed() → semua data (termasuk yang dihapus)
+
+2️⃣ DI CONTROLLER (app/Http/Controllers/EventsController.php):
+   
+   ❌ SEBELUM (hapus langsung):
+   ```php
+   public function index()
+   {
+       $events = Event::all();  // Semua data + data dihapus
+   }
+   ```
+   
+   ✅ SESUDAH (exclude soft deleted):
+   ```php
+   public function index()
+   {
+       // Ambil data yang BELUM dihapus (deleted_at IS NULL)
+       $events = Event::whereNull('deleted_at')->with('kategori')->get();
+       
+       // Ambil data yang SUDAH dihapus (untuk ditampilkan di tab Trash)
+       $deletedEvents = Event::onlyTrashed()->with('kategori')->get();
+       
+       return view('events.events', compact('events', 'deletedEvents'));
+   }
+   
+   public function destroy(string $id)
+   {
+       $event = Event::findOrFail($id);
+       $event->delete();  // SOFT DELETE: set deleted_at = now()
+       return redirect()->route('admin.events.index')->with('success', 'Event berhasil dihapus.');
+   }
+   
+   public function restore(string $id)
+   {
+       $event = Event::onlyTrashed()->findOrFail($id);  // Cari di data dihapus
+       $event->restore();  // RESTORE: set deleted_at = NULL
+       return redirect()->route('admin.events.index')->with('success', 'Event berhasil dipulihkan.');
+   }
+   ```
+
+3️⃣ DI ROUTES (routes/web.php):
+   ```php
+   Route::resource('events', EventsController::class);
+   Route::post('/events/{id}/restore', [EventsController::class, 'restore'])->name('events.restore');
+   //                                ↑ Endpoint untuk restore
+   ```
+
+4️⃣ DI VIEWS (Blade template):
+   ```blade
+   <!-- Tab data aktif -->
+   <h2>Event Aktif</h2>
+   @foreach($events as $event)
+       <div>
+           {{ $event->judul }}
+           <button onclick="deleteEvent({{ $event->id }})">Hapus</button>
+       </div>
+   @endforeach
+   
+   <!-- Tab data dihapus/Trash -->
+   <h2>Event Dihapus</h2>
+   @foreach($deletedEvents as $event)
+       <div>
+           {{ $event->judul }} (dihapus: {{ $event->deleted_at }})
+           <button onclick="restoreEvent({{ $event->id }})">Pulihkan</button>
+       </div>
+   @endforeach
+   
+   <!-- Form delete -->
+   <form id="deleteForm" method="POST">
+       @csrf
+       @method('DELETE')
+   </form>
+   
+   <script>
+       function deleteEvent(id) {
+           document.getElementById('deleteForm').action = `/admin/events/${id}`;
+           document.getElementById('deleteForm').submit();  // DELETE /admin/events/1
+       }
+       
+       function restoreEvent(id) {
+           // POST /admin/events/1/restore
+           fetch(`/admin/events/${id}/restore`, {
+               method: 'POST',
+               headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+           }).then(() => window.location.reload());
+       }
+   </script>
+   ```
+
+
+🎯 ALUR LOGIKA SOFT DELETE:
+============================
+
+AKSI: User klik tombol DELETE pada Event
+
+FLOW DELETE:
+  ┌─ User klik tombol Delete Event ID 1
+  │
+  ├─ Submit form DELETE ke /admin/events/1
+  │
+  ├─ EventsController::destroy(1) dipanggil
+  │
+  ├─ $event = Event::findOrFail(1)  // Cari event
+  │
+  ├─ $event->delete()  // Soft delete:
+  │                    // UPDATE events SET deleted_at = NOW() WHERE id = 1
+  │
+  └─ Redirect ke admin.events.index dengan success message
+                     ↓
+        HASIL DI DATABASE:
+        | id | judul  | deleted_at          |
+        |----|--------|---------------------|
+        | 1  | Konser | 2026-01-26 10:30:45 | ← Masih ada tapi "dihapus"
+
+
+FLOW RESTORE:
+  ┌─ Admin klik tombol Pulihkan pada Event Dihapus
+  │
+  ├─ Submit form POST ke /admin/events/1/restore
+  │
+  ├─ EventsController::restore(1) dipanggil
+  │
+  ├─ $event = Event::onlyTrashed()->findOrFail(1)  // Cari di trash
+  │
+  ├─ $event->restore()  // Restore:
+  │                     // UPDATE events SET deleted_at = NULL WHERE id = 1
+  │
+  └─ Redirect ke admin.events.index dengan success message
+                     ↓
+        HASIL DI DATABASE:
+        | id | judul  | deleted_at |
+        |----|--------|------------|
+        | 1  | Konser | NULL       | ← Kembali normal
+
+
+✨ KEUNTUNGAN SOFT DELETE:
+===========================
+
+1. 🔄 DATA REVERSIBLE
+   - Bisa dipulihkan kapan saja
+   - Tidak ada permanent loss
+   
+2. 🔍 AUDIT TRAIL
+   - Tahu siapa yang hapus apa kapan
+   - Bisa track deleted_at
+   
+3. 🔗 RELASI TETAP AMAN
+   - Foreign key tidak rusak
+   - Data related tetap konsisten
+   
+4. 🛡️ COMPLIANCE
+   - Memenuhi requirement audit/legal
+   - Data history tersimpan
+   
+5. 💾 GARBAGE COLLECTION
+   - Bisa permanent delete nanti (via cron job)
+   - Atau keep forever untuk compliance
+
+
+⚙️ UNTUK MENJALANKAN MIGRATIONS:
+=================================
+
+Di terminal, jalankan:
+```bash
+php artisan migrate
+```
+
+Ini akan:
+1. Membuat kolom deleted_at di tables: events, tikets, kategoris, orders
+2. Set default value NULL untuk semua existing records
+3. Soft delete siap digunakan!
+
+
+🔧 CUSTOMIZATION (Optional):
+============================
+
+Jika ingin tambah info "siapa yang delete":
+1. Tambah kolom deleted_by di migration
+2. Update middleware untuk track user ID
+3. Update soft delete di model
+
+Jika ingin permanent delete (force delete):
+```php
+$event->forceDelete();  // Benar-benar hapus dari database
+```
+
+Jika ingin lihat semua termasuk dihapus:
+```php
+$events = Event::withTrashed()->get();
+```
+
+==============================================================================
+END OF SOFT DELETE EXPLANATION
+==============================================================================
